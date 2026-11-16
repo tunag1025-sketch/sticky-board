@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>메모 관리</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  .hidden { display:none !important; }
+
+  /* 로그인 */
+  .login { max-width:360px; margin:0 auto; padding:18vh var(--space-4) var(--space-8); }
+  .login h1 { margin:0 0 var(--space-2); font-size:var(--text-2xl); font-weight:800; letter-spacing:-.02em; }
+  .login p { margin:0 0 var(--space-8); color:var(--color-text-muted); }
+  .label { display:block; margin-bottom:var(--space-2); font-size:var(--text-sm); font-weight:700; }
+  .input-wrap { position:relative; }
+  .input { width:100%; min-height:48px; padding:0 var(--space-4); border:1px solid var(--color-border-strong); border-radius:var(--radius-md);
+           background:var(--color-surface); font-size:var(--text-base); color:var(--color-text); }
+  .input:focus { outline:none; border-color:var(--color-focus); box-shadow:0 0 0 3px rgba(37,99,235,.2); }
+  .input-wrap .input { padding-right:52px; }
+  .peek { position:absolute; right:2px; top:2px; width:44px; height:44px; border:0; background:none; border-radius:var(--radius-sm); color:var(--color-text-muted); cursor:pointer; }
+  .peek svg { width:20px; height:20px; }
+  .field-error { min-height:20px; margin:var(--space-2) 0 var(--space-4); font-size:var(--text-sm); color:var(--color-danger); }
+
+  /* 관리 화면 */
+  .wrap { max-width:960px; margin:0 auto; padding:var(--space-8) var(--space-4) 120px; }
+  .top { display:flex; align-items:flex-end; justify-content:space-between; gap:var(--space-4); flex-wrap:wrap; margin-bottom:var(--space-6); }
+  .top h1 { margin:0; font-size:var(--text-2xl); font-weight:800; letter-spacing:-.02em; }
+  .stats { display:flex; gap:var(--space-6); }
+  .stats div { font-size:var(--text-sm); color:var(--color-text-muted); }
+  .stats b { display:block; font-size:var(--text-2xl); font-weight:800; color:var(--color-text); font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+
+  .toolbar { display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; padding:var(--space-4) 0; border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border); }
+  .toolbar .spacer { flex:1; }
+  .switch { display:inline-flex; align-items:center; gap:var(--space-3); min-height:44px; padding:0 var(--space-2); border:0; background:none; cursor:pointer;
+            font-size:var(--text-base); font-weight:600; color:var(--color-text); }
+  .switch .track { position:relative; width:44px; height:26px; border-radius:var(--radius-full); background:var(--color-border-strong); transition:background-color var(--dur-2) var(--ease-out); }
+  .switch .track::after { content:""; position:absolute; left:3px; top:3px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25);
+                          transition:transform var(--dur-2) var(--ease-out); }
+  .switch[aria-checked="true"] .track { background:var(--color-success); }
+  .switch[aria-checked="true"] .track::after { transform:translateX(18px); }
+
+  .search { position:relative; margin:var(--space-5) 0 var(--space-4); }
+  .search svg { position:absolute; left:14px; top:50%; width:18px; height:18px; margin-top:-9px; color:var(--color-text-muted); pointer-events:none; }
+  .search .input { padding-left:42px; }
+
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:center; gap:var(--space-4); padding:var(--space-4) 0; border-bottom:1px solid var(--color-border); }
+  li .chip { flex:none; width:12px; align-self:stretch; min-height:40px; border-radius:3px; background:var(--c); box-shadow:inset 0 0 0 1px rgba(0,0,0,.08); }
+  li .body { flex:1; min-width:0; }
+  li .t { margin:0; font-size:var(--text-base); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
+  li .time { margin-top:var(--space-1); font-size:var(--text-sm); color:var(--color-text-muted); font-variant-numeric:tabular-nums; }
+  li.fresh { animation:fresh 2.4s var(--ease-out); }
+  @keyframes fresh { from { background:#FFF8D6; } to { background:transparent; } }
+  .empty-list { padding:var(--space-12) 0; text-align:center; color:var(--color-text-muted); }
+
+  .toast { position:fixed; left:50%; bottom:calc(var(--space-6) + env(safe-area-inset-bottom)); z-index:50; display:flex; align-items:center; gap:var(--space-4);
+           min-height:52px; padding:var(--space-2) var(--space-2) var(--space-2) var(--space-5); border-radius:var(--radius-md); background:var(--color-primary); color:#fff;
+           font-size:var(--text-base); box-shadow:var(--shadow-float); transform:translate(-50%, 16px); opacity:0; pointer-events:none;
+           transition:transform var(--dur-2) var(--ease-out), opacity var(--dur-2); }
+  .toast.show { transform:translate(-50%, 0); opacity:1; pointer-events:auto; }
+  .toast button { min-height:40px; padding:0 var(--space-4); border:0; border-radius:var(--radius-sm); background:rgba(255,255,255,.14); color:#fff; font-weight:700; font-size:var(--text-base); cursor:pointer; }
+</style>
+</head>
+<body>
+<form class="login" id="login" autocomplete="on">
+  <h1>관리자 로그인</h1>
+  <p>메모 삭제와 접수 마감을 관리해요.</p>
+  <label class="label" for="pw">비밀번호</label>
+  <div class="input-wrap">
+    <input class="input" type="password" id="pw" name="password" autocomplete="current-password" aria-describedby="err" required>
+    <button class="peek" type="button" id="peek" aria-label="비밀번호 보기" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+  </div>
+  <div class="field-error" id="err" role="alert"></div>
+  <button class="btn btn-primary btn-lg btn-block" type="submit" id="go">들어가기</button>
+</form>
+
+<div class="wrap hidden" id="app">
+  <div class="top">
+    <h1>메모 관리</h1>
+    <div class="stats">
+      <div><b id="clients">-</b>접속 중</div>
+      <div><b id="total">0</b>메모</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="switch" id="toggle" type="button" role="switch" aria-checked="true">
+      <span class="track" aria-hidden="true"></span><span id="toggleText">메모 접수 중</span>
+    </button>
+    <span class="spacer"></span>
+    <a class="btn" href="/board" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+      보드 열기
+    </a>
+    <button class="btn btn-danger" id="clear" type="button">전체 삭제</button>
+  </div>
+
+  <div class="search">
+    <label class="sr-only" for="search">메모 검색</label>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input class="input" type="search" id="search" placeholder="메모 내용으로 검색">
+  </div>
+  <ul id="list" aria-label="메모 목록 (최신순)"></ul>
+  <div class="empty-list hidden" id="emptyList">표시할 메모가 없어요.</div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastText"></span><button type="button" id="undo">되돌리기</button></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io({ transports: ['websocket', 'polling'] });
+  const $ = (id) => document.getElementById(id);
+  const list = $('list');
+  const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
+  let open = true, authed = false, lastDeletedId = null, toastTimer;
+
+  function auth(pw) {
+    $('go').disabled = true;
+    socket.emit('admin:auth', pw, (r) => {
+      $('go').disabled = false;
+      if (!r.ok) { $('err').textContent = '비밀번호가 맞지 않아요. 다시 확인해주세요.'; try { sessionStorage.removeItem('pw'); } catch {} $('pw').focus(); return; }
+      authed = true; try { sessionStorage.setItem('pw', pw); } catch {}
+      $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+      list.replaceChildren(...r.notes.map(n => item(n, false))); sync();
+      stats();
+    });
+  }
+  $('login').addEventListener('submit', (e) => { e.preventDefault(); auth($('pw').value); });
+  $('peek').addEventListener('click', () => {
+    const show = $('pw').type === 'password';
+    $('pw').type = show ? 'text' : 'password';
+    $('peek').setAttribute('aria-pressed', show); $('peek').setAttribute('aria-label', show ? '비밀번호 숨기기' : '비밀번호 보기');
+  });
+  socket.on('connect', () => { let pw; try { pw = sessionStorage.getItem('pw'); } catch {} if (pw) auth(pw); });
+
+  const fmt = (ts) => new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  function item(n, fresh) {
+    const li = document.createElement('li');
+    li.dataset.id = n.id; li.dataset.ts = n.ts; li.style.setProperty('--c', n.color);
+    if (fresh) li.className = 'fresh';
+    li.innerHTML = `<span class="chip" aria-hidden="true"></span><div class="body"><p class="t"></p><div class="time">${fmt(n.ts)}</div></div>
+      <button class="btn btn-danger" type="button">${ICON_TRASH}삭제</button>`;
+    li.querySelector('.t').textContent = n.text;
+    li.querySelector('button').addEventListener('click', () => socket.emit('admin:delete', n.id));
+    filterOne(li);
+    return li;
+  }
+  function sync() {
+    $('total').textContent = list.children.length.toLocaleString('ko-KR');
+    $('emptyList').classList.toggle('hidden', [...list.children].some(li => !li.classList.contains('hidden')));
+  }
+  function filterOne(li) { const q = $('search').value.trim(); li.classList.toggle('hidden', !!q && !li.querySelector('.t').textContent.includes(q)); }
+  $('search').addEventListener('input', () => { [...list.children].forEach(filterOne); sync(); });
+
+  function toast(msg, undoId) {
+    lastDeletedId = undoId; $('toastText').textContent = msg;
+    $('undo').classList.toggle('hidden', !undoId);
+    $('toast').classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').classList.remove('show'); lastDeletedId = null; }, 5000);
+  }
+  $('undo').addEventListener('click', () => { if (lastDeletedId) socket.emit('admin:restore', lastDeletedId); $('toast').classList.remove('show'); lastDeletedId = null; });
+
+  socket.on('notes:init', (notes) => { if (authed) { list.replaceChildren(...notes.slice().reverse().map(n => item(n, false))); sync(); } });
+  socket.on('note:new', (n) => { if (!authed) return; list.prepend(item(n, true)); sync(); });
+  socket.on('note:delete', (id) => {
+    const li = list.querySelector(`li[data-id="${CSS.escape(id)}"]`);
+    if (!li) return;
+    li.remove(); sync();
+    toast('메모를 삭제했어요.', id);
+  });
+  socket.on('note:restore', (n) => {
+    if (!authed) return;
+    const next = [...list.children].find(li => Number(li.dataset.ts) < n.ts);
+    next ? next.before(item(n, true)) : list.appendChild(item(n, true));
+    sync(); toast('메모를 되돌렸어요.');
+  });
+  socket.on('settings', (s) => {
+    open = s.open;
+    $('toggle').setAttribute('aria-checked', open);
+    $('toggleText').textContent = open ? '메모 접수 중' : '메모 접수 마감됨';
+  });
+  $('toggle').addEventListener('click', () => socket.emit('admin:open', !open));
+  $('clear').addEventListener('click', () => {
+    if (confirm(`메모 ${list.children.length}장을 모두 삭제할까요?\n이 작업은 되돌릴 수 없어요.`)) socket.emit('admin:clear');
+  });
+
+  function stats() { if (authed) socket.emit('admin:stats', (s) => { $('clients').textContent = s.clients.toLocaleString('ko-KR'); }); }
+  setInterval(stats, 5000);
+</script>
+</body>
+</html>

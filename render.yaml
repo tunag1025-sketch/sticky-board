@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: sticky-board
+    runtime: node
+    plan: starter        # 무료 플랜은 15분 미사용 시 잠들어서 행사용으로는 비추천
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false      # 대시보드에서 직접 입력

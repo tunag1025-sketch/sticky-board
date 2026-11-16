@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메모 보드</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  :root { --size: 240px; --gutter: clamp(16px, 3vw, 56px); }
+
+  header { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:var(--space-8);
+           padding:clamp(16px, 2vw, 28px) var(--gutter); background:var(--color-bg); border-bottom:1px solid var(--color-border); }
+  .head-main { flex:1; min-width:0; }
+  .live { display:inline-flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-2);
+          font-size:clamp(12px, .9vw, 15px); font-weight:700; letter-spacing:.06em; color:var(--color-text-muted); }
+  .live i { width:8px; height:8px; border-radius:50%; background:var(--color-success); box-shadow:0 0 0 0 rgba(27,127,75,.5); animation:pulse 2s infinite; }
+  body.is-offline .live i { background:var(--color-danger); animation:none; }
+  @keyframes pulse { 70% { box-shadow:0 0 0 8px rgba(27,127,75,0); } 100% { box-shadow:0 0 0 0 rgba(27,127,75,0); } }
+  h1 { margin:0; font-size:clamp(24px, 2.8vw, 52px); font-weight:800; letter-spacing:-.03em; line-height:1.2; text-wrap:balance; }
+  .stat { text-align:right; white-space:nowrap; }
+  .stat .num { display:block; font-size:clamp(28px, 3vw, 56px); font-weight:800; letter-spacing:-.03em; line-height:1; font-variant-numeric:tabular-nums; }
+  .stat .lbl { font-size:clamp(12px, .9vw, 15px); font-weight:600; color:var(--color-text-muted); }
+  .join { display:flex; align-items:center; gap:var(--space-4); padding-left:var(--space-8); border-left:1px solid var(--color-border); }
+  .join img { display:block; width:clamp(76px, 7vw, 128px); height:auto; }
+  .join .url { font-size:clamp(14px, 1.15vw, 22px); font-weight:700; letter-spacing:-.01em; }
+  .join .hint { margin-top:var(--space-1); font-size:clamp(12px, .9vw, 16px); color:var(--color-text-muted); }
+  body.no-qr .join { display:none; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--size), 1fr)); gap:clamp(28px, 3vw, 52px) clamp(20px, 2.4vw, 40px);
+          padding:clamp(32px, 3vw, 56px) var(--gutter) 96px; }
+
+  .note { position:relative; aspect-ratio:1; container-type:inline-size; transform:rotate(var(--r));
+          content-visibility:auto; contain-intrinsic-size:var(--size) var(--size); }
+  .note::before { content:""; position:absolute; inset:0; background:var(--c); filter:brightness(.92);
+                  transform:rotate(var(--r2)) translate(-2.5%, 2%); box-shadow:0 2px 6px rgba(0,0,0,.12); }
+  .paper { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; overflow:hidden;
+           padding:16cqw 10cqw 10cqw; background:var(--c); box-shadow:var(--shadow-note); }
+  .paper::after { content:""; position:absolute; right:0; bottom:0; width:14cqw; height:14cqw;
+                  background:linear-gradient(135deg, transparent 50%, rgba(0,0,0,.07) 50%, rgba(255,255,255,.4) 100%); }
+  .text { max-height:100%; font-weight:650; line-height:1.38; letter-spacing:-.02em; text-align:center; color:var(--color-on-note);
+          white-space:pre-wrap; word-break:keep-all; overflow-wrap:anywhere; }
+  .s1 .text { font-size:12.5cqw; font-weight:750; line-height:1.28; }
+  .s2 .text { font-size:9.6cqw; font-weight:700; }
+  .s3 .text { font-size:7.8cqw; }
+  .s4 .text { font-size:6.2cqw; }
+  .pin { position:absolute; left:50%; top:-3cqw; z-index:2; width:12cqw; height:12cqw; margin-left:-6cqw; border-radius:50%;
+         background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.8) 0 12%, var(--p) 46%, color-mix(in srgb, var(--p) 65%, #000) 100%);
+         box-shadow:0 3cqw 3cqw -1cqw rgba(0,0,0,.32); }
+  .pin::after { content:""; position:absolute; left:50%; top:80%; z-index:-1; width:1.5cqw; height:5.5cqw; margin-left:-.75cqw; background:#9a9a9a; border-radius:1px; }
+
+  .note.enter { animation:enter var(--dur-4) var(--ease-spring) both; content-visibility:visible; }
+  @keyframes enter { from { transform:translateY(-32px) scale(1.25) rotate(0); opacity:0; } to { transform:rotate(var(--r)); opacity:1; } }
+  .note.leave { animation:leave var(--dur-2) var(--ease-in) forwards; }
+  @keyframes leave { to { transform:scale(.85) rotate(var(--r)); opacity:0; } }
+
+  .empty { grid-column:1/-1; display:flex; flex-direction:column; align-items:center; gap:var(--space-3); padding:14vh 0; text-align:center; }
+  .empty svg { width:56px; height:56px; color:var(--color-border-strong); }
+  .empty strong { font-size:clamp(20px, 2vw, 34px); font-weight:800; letter-spacing:-.02em; }
+  .empty span { font-size:clamp(14px, 1.2vw, 20px); color:var(--color-text-muted); }
+
+  .newbar { position:fixed; left:50%; top:calc(var(--hh, 120px) + 16px); z-index:30; display:inline-flex; align-items:center; gap:var(--space-2);
+            min-height:48px; padding:0 var(--space-6); border:0; border-radius:var(--radius-full); background:var(--color-primary); color:var(--color-on-primary);
+            font-size:var(--text-lg); font-weight:700; box-shadow:var(--shadow-float); cursor:pointer;
+            transform:translate(-50%, -12px); opacity:0; pointer-events:none; transition:transform var(--dur-2) var(--ease-out), opacity var(--dur-2); }
+  .newbar.show { transform:translate(-50%, 0); opacity:1; pointer-events:auto; }
+  .newbar svg { width:20px; height:20px; }
+  .newbar span { font-variant-numeric:tabular-nums; }
+
+  @media (max-width: 760px) {
+    header { flex-wrap:wrap; gap:var(--space-4); }
+    .join { display:none; }
+    :root { --size: 150px; }
+  }
+</style>
+</head>
+<body>
+<header id="hdr">
+  <div class="head-main">
+    <div class="live" id="live"><i aria-hidden="true"></i><span id="liveText">실시간</span></div>
+    <h1 id="title">여러분의 이야기를 들려주세요</h1>
+  </div>
+  <div class="stat"><span class="num" id="count" aria-live="polite">0</span><span class="lbl">장의 메모</span></div>
+  <div class="join">
+    <img id="qr" src="/qr.svg" alt="메모 작성 페이지로 가는 QR 코드" width="128" height="128">
+    <div><div class="url" id="url"></div><div class="hint">QR을 찍고 메모를 남겨주세요</div></div>
+  </div>
+</header>
+
+<main class="grid" id="grid" aria-label="메모 목록">
+  <div class="empty" id="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></svg>
+    <strong>아직 메모가 없어요</strong>
+    <span>QR 코드를 찍고 첫 메모를 남겨주세요</span>
+  </div>
+</main>
+
+<button class="newbar" id="newbar" type="button">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  <span>새 메모 <span id="newcount">0</span>개</span>
+</button>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  // URL 옵션: ?title=제목  &size=280 (메모 최소 크기 px)  &qr=0 (QR 숨김)
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('title')) { document.getElementById('title').textContent = qs.get('title'); document.title = qs.get('title'); }
+  if (qs.get('size')) document.documentElement.style.setProperty('--size', parseInt(qs.get('size')) + 'px');
+  if (qs.get('qr') === '0') document.body.classList.add('no-qr');
+  fetch('/join-url').then(r => r.json()).then(d => document.getElementById('url').textContent = d.url.replace(/^https?:\/\//, '').replace(/\/$/, ''));
+
+  const grid = document.getElementById('grid'), empty = document.getElementById('empty');
+  const newbar = document.getElementById('newbar'), countEl = document.getElementById('count');
+  const PINS = ['#E63946', '#2BB673', '#EF5DA8', '#F4C430', '#3B82F6', '#E63946'];
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let total = 0, unseen = 0;
+
+  // id로 기울기·핀 색을 고정 (새로고침해도 같은 모양)
+  function hash(s) { let h = 2166136261; for (const ch of s) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }
+  function sizeClass(t) { const n = [...t].length + (t.split('\n').length - 1) * 8; return n <= 12 ? 's1' : n <= 30 ? 's2' : n <= 60 ? 's3' : 's4'; }
+
+  function make(n, animate) {
+    const h = hash(n.id);
+    const el = document.createElement('article');
+    el.className = 'note ' + sizeClass(n.text) + (animate ? ' enter' : '');
+    el.dataset.id = n.id; el.dataset.ts = n.ts;
+    el.style.setProperty('--c', n.color);
+    el.style.setProperty('--r', ((h % 60) / 10 - 3).toFixed(1) + 'deg');
+    el.style.setProperty('--r2', (((h >>> 8) % 50) / 10 - 2.5).toFixed(1) + 'deg');
+    el.style.setProperty('--p', PINS[(h >>> 16) % PINS.length]);
+    el.innerHTML = '<div class="paper"><p class="text" style="margin:0"></p></div><span class="pin" aria-hidden="true"></span>';
+    el.querySelector('.text').textContent = n.text;
+    if (animate) el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
+    return el;
+  }
+  function setCount(n) { total = n; countEl.textContent = n.toLocaleString('ko-KR'); empty.style.display = n ? 'none' : ''; }
+  const atTop = () => window.scrollY < 80;
+  function updateBar() { document.getElementById('newcount').textContent = unseen; newbar.classList.toggle('show', unseen > 0); }
+
+  // 스크롤해서 보는 중일 때 새 메모가 위에 끼어들어도 보던 위치가 밀리지 않게 보정
+  function keepScroll(fn) {
+    if (atTop()) return fn(true);
+    const anchor = [...grid.querySelectorAll('.note')].find(e => e.getBoundingClientRect().bottom > 0);
+    const before = anchor?.getBoundingClientRect().top;
+    fn(false);
+    if (anchor) window.scrollBy(0, anchor.getBoundingClientRect().top - before);
+  }
+
+  const socket = io({ transports: ['websocket', 'polling'] });
+  socket.on('connect', () => { document.body.classList.remove('is-offline'); document.getElementById('liveText').textContent = '실시간'; socket.emit('board:join'); });
+  socket.on('disconnect', () => { document.body.classList.add('is-offline'); document.getElementById('liveText').textContent = '재연결 중…'; });
+
+  socket.on('notes:init', (notes) => {
+    grid.querySelectorAll('.note').forEach(e => e.remove());
+    const frag = document.createDocumentFragment();
+    for (let i = notes.length - 1; i >= 0; i--) frag.appendChild(make(notes[i], false)); // 최신이 위
+    grid.appendChild(frag);
+    setCount(notes.length); unseen = 0; updateBar();
+  });
+
+  socket.on('note:new', (n) => {
+    keepScroll((top) => {
+      empty.after(make(n, top && !reduceMotion.matches));
+      if (!top) { unseen++; updateBar(); }
+    });
+    setCount(total + 1);
+  });
+
+  socket.on('note:restore', (n) => {
+    keepScroll(() => {
+      const next = [...grid.querySelectorAll('.note')].find(e => Number(e.dataset.ts) < n.ts);
+      next ? next.before(make(n, false)) : grid.appendChild(make(n, false));
+    });
+    setCount(total + 1);
+  });
+
+  socket.on('note:delete', (id) => {
+    const el = grid.querySelector(`.note[data-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+    setCount(Math.max(0, total - 1));
+    if (reduceMotion.matches) return el.remove();
+    el.classList.add('leave');
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+  });
+
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => { ticking = false; if (atTop() && unseen) { unseen = 0; updateBar(); } });
+  }, { passive: true });
+  newbar.addEventListener('click', () => window.scrollTo({ top: 0, behavior: reduceMotion.matches ? 'auto' : 'smooth' }));
+  const setHH = () => document.documentElement.style.setProperty('--hh', document.getElementById('hdr').offsetHeight + 'px');
+  new ResizeObserver(setHH).observe(document.getElementById('hdr'));
+</script>
+</body>
+</html>
